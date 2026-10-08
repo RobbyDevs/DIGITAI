@@ -4,40 +4,59 @@ import React, {
   useRef,
   useState,
 } from 'react';
+
 import {
+  GestureResponderEvent,
+  PanResponder,
   StyleSheet,
   View,
-  PanResponder,
-  GestureResponderEvent,
 } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 
-type Point = {
+import {
+  Canvas,
+  Path,
+  Skia,
+} from '@shopify/react-native-skia';
+
+export type Point = {
   x: number;
   y: number;
 };
 
-type Stroke = Point[];
+export type Stroke = Point[];
 
 type DrawingCanvasProps = {
   size: number;
 };
 
+const STROKE_WIDTH_RATIO = 0.06;
+
 export type DrawingCanvasRef = {
   clear: () => void;
+  getStrokes: () => Stroke[];
 };
 
 const DrawingCanvas = forwardRef<
   DrawingCanvasRef,
   DrawingCanvasProps
 >(({ size }, ref) => {
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [currentStroke, setCurrentStroke] = useState<Stroke>([]);
+  const [strokes, setStrokes] =
+    useState<Stroke[]>([]);
+
+  const [currentStroke, setCurrentStroke] =
+    useState<Stroke>([]);
+
+  const strokeWidth =
+    size * STROKE_WIDTH_RATIO;
 
   useImperativeHandle(ref, () => ({
     clear: () => {
       setStrokes([]);
       setCurrentStroke([]);
+    },
+
+    getStrokes: () => {
+      return strokes;
     },
   }));
 
@@ -52,34 +71,49 @@ const DrawingCanvas = forwardRef<
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder:
+        () => true,
 
-      onPanResponderGrant: (event) => {
-        const point = getPoint(event);
-        setCurrentStroke([point]);
-      },
+      onMoveShouldSetPanResponder:
+        () => true,
 
-      onPanResponderMove: (event) => {
-        const point = getPoint(event);
-
-        setCurrentStroke((previous) => [
-          ...previous,
-          point,
+      onPanResponderGrant: (
+        event: GestureResponderEvent,
+      ) => {
+        setCurrentStroke([
+          getPoint(event),
         ]);
       },
 
-      onPanResponderRelease: () => {
-        setCurrentStroke((current) => {
-          if (current.length > 0) {
-            setStrokes((previous) => [
-              ...previous,
-              current,
-            ]);
-          }
+      onPanResponderMove: (
+        event: GestureResponderEvent,
+      ) => {
+        const point =
+          getPoint(event);
 
-          return [];
-        });
+        setCurrentStroke(
+          previous => [
+            ...previous,
+            point,
+          ],
+        );
+      },
+
+      onPanResponderRelease: () => {
+        setCurrentStroke(
+          current => {
+            if (current.length > 0) {
+              setStrokes(
+                previous => [
+                  ...previous,
+                  current,
+                ],
+              );
+            }
+
+            return [];
+          },
+        );
       },
 
       onPanResponderTerminate: () => {
@@ -88,17 +122,30 @@ const DrawingCanvas = forwardRef<
     }),
   ).current;
 
-  const createPath = (stroke: Stroke) => {
+  const createPath = (
+    stroke: Stroke,
+  ) => {
+    const path =
+      Skia.Path.Make();
+
     if (stroke.length === 0) {
-      return '';
+      return path;
     }
 
-    const [first, ...rest] = stroke;
+    path.moveTo(
+      stroke[0].x,
+      stroke[0].y,
+    );
 
-    let path = `M ${first.x} ${first.y}`;
-
-    for (const point of rest) {
-      path += ` L ${point.x} ${point.y}`;
+    for (
+      let i = 1;
+      i < stroke.length;
+      i++
+    ) {
+      path.lineTo(
+        stroke[i].x,
+        stroke[i].y,
+      );
     }
 
     return path;
@@ -115,39 +162,45 @@ const DrawingCanvas = forwardRef<
       ]}
       {...panResponder.panHandlers}
     >
-      <Svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
+      <Canvas
+        style={{
+          width: size,
+          height: size,
+        }}
       >
-        {strokes.map((stroke, index) => (
-          <Path
-            key={`stroke-${index}`}
-            d={createPath(stroke)}
-            stroke="white"
-            strokeWidth={size * 0.06}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        ))}
+        {strokes.map(
+          (stroke, index) => (
+            <Path
+              key={`stroke-${index}`}
+              path={createPath(stroke)}
+              color="white"
+              style="stroke"
+              strokeWidth={strokeWidth}
+              strokeCap="round"
+              strokeJoin="round"
+            />
+          ),
+        )}
 
         {currentStroke.length > 0 && (
           <Path
-            d={createPath(currentStroke)}
-            stroke="white"
-            strokeWidth={size * 0.06}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
+            path={createPath(
+              currentStroke,
+            )}
+            color="white"
+            style="stroke"
+            strokeWidth={strokeWidth}
+            strokeCap="round"
+            strokeJoin="round"
           />
         )}
-      </Svg>
+      </Canvas>
     </View>
   );
 });
 
-DrawingCanvas.displayName = 'DrawingCanvas';
+DrawingCanvas.displayName =
+  'DrawingCanvas';
 
 const styles = StyleSheet.create({
   container: {
